@@ -1,6 +1,13 @@
 version: '3.8'
 
 services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
   backend:
     build: ./backend
     ports:
@@ -9,8 +16,11 @@ services:
       - ENVIRONMENT=DEV
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-secret-change-in-production-kb-mvp-2024}
+      - REDIS_URL=redis://redis:6379
     volumes:
       - ./backend/data:/app/data
+    depends_on:
+      - redis
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -25,3 +35,6 @@ services:
       - VITE_API_URL=http://backend:8000
     depends_on:
       - backend
+
+volumes:
+  redis_data:
