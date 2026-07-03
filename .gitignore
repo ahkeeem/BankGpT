@@ -1,0 +1,23 @@
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Node dependencies
+node_modules/
+
+# Python cache and temporary files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+
+# Local configuration
+.env
+.env.local
+
+# OS files
+.DS_Store
+Thumbs.db
