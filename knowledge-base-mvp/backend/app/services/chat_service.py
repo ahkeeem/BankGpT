@@ -36,8 +36,18 @@ class ChatService:
     ):
         self.vector_store = vector_store
         self.embedding_service = embedding_service
-        self.openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        self.model = settings.OPENAI_CHAT_MODEL
+        
+        if settings.GROQ_API_KEY:
+            self.openai_client = OpenAI(
+                api_key=settings.GROQ_API_KEY,
+                base_url="https://api.groq.com/openai/v1"
+            )
+            self.model = settings.GROQ_CHAT_MODEL
+            print(f"🤖 [ChatService] Running in GROQ Mode with model: {self.model}")
+        else:
+            self.openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
+            self.model = settings.OPENAI_CHAT_MODEL
+            print(f"🤖 [ChatService] Running in OpenAI Mode with model: {self.model}")
 
     def _get_redis_client(self):
         """Lazy initialization of the Redis/Valkey client."""
@@ -179,9 +189,9 @@ class ChatService:
             "content": f"Context Documents:\n\n{context_text}\n\n---\n\nQuestion: {question}",
         })
 
-        # Stream from OpenAI
-        if not settings.OPENAI_API_KEY:
-            print("⚠️ [ChatService] OPENAI_API_KEY not set. Using mock chat generation.")
+        # Stream from OpenAI or Groq
+        if not settings.OPENAI_API_KEY and not settings.GROQ_API_KEY:
+            print("⚠️ [ChatService] Neither OpenAI nor Groq keys set. Using mock chat generation.")
             import asyncio
             mock_intro = "**[Mock Mode - No OpenAI API Key Set]**\n\n"
             if chunks:

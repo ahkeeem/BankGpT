@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_CHAT_MODEL: str = "gpt-4o-mini"
 
+    # --- Groq ---
+    GROQ_API_KEY: str = ""
+    GROQ_CHAT_MODEL: str = "llama-3.1-8b-instant"
+
+
     # --- JWT Auth ---
     JWT_SECRET_KEY: str = "dev-secret-change-in-production-kb-mvp-2024"
     JWT_ALGORITHM: str = "HS256"
