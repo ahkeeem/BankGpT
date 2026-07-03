@@ -134,7 +134,7 @@ export async function listDocuments(orgId) {
  * @param {function} onError - Callback on error: (errorMessage) => void
  * @returns {AbortController} - Controller to abort the stream
  */
-export function streamChat(organizationId, question, { onToken, onSources, onDone, onError }) {
+export function streamChat(organizationId, question, sessionId, { onToken, onSources, onDone, onError }) {
   const controller = new AbortController();
 
   fetch(`${BASE_URL}/api/v1/chat`, {
@@ -144,6 +144,7 @@ export function streamChat(organizationId, question, { onToken, onSources, onDon
       organization_id: organizationId,
       question,
       stream: true,
+      session_id: sessionId || '',
     }),
     signal: controller.signal,
   })

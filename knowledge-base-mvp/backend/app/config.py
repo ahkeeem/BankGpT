@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     DATABRICKS_VECTOR_SEARCH_ENDPOINT: str = ""
     DATABRICKS_VECTOR_INDEX_NAME: str = ""
 
+    # --- Redis / Valkey Settings ---
+    REDIS_URL: str = ""
+    REDIS_SESSION_TTL: int = 86400  # 24 hours
+
+
     # --- CORS ---
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",

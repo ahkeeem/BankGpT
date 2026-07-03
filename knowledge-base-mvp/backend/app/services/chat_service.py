@@ -39,6 +39,66 @@ class ChatService:
         self.openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
         self.model = settings.OPENAI_CHAT_MODEL
 
+    def _get_redis_client(self):
+        """Lazy initialization of the Redis/Valkey client."""
+        if not hasattr(self, "_redis_client"):
+            self._redis_client = None
+            if settings.REDIS_URL:
+                try:
+                    import redis
+                    self._redis_client = redis.Redis.from_url(
+                        settings.REDIS_URL,
+                        decode_responses=True,
+                        socket_timeout=2.0,
+                    )
+                    self._redis_client.ping()
+                    print(f"🔌 Connected to Valkey/Redis session store: {settings.REDIS_URL}")
+                except Exception as e:
+                    print(f"⚠️ [ChatService] Could not connect to Redis: {e}. Falling back to in-memory history.")
+                    self._redis_client = None
+        return self._redis_client
+
+    def get_chat_history(self, session_id: str) -> List[Dict[str, str]]:
+        """Retrieve the conversational history for a session."""
+        if not session_id:
+            return []
+
+        client = self._get_redis_client()
+        if client:
+            try:
+                key = f"session:{session_id}"
+                history_data = client.get(key)
+                if history_data:
+                    return json.loads(history_data)
+            except Exception as e:
+                print(f"[ChatService] Error reading from Redis: {e}")
+
+        # In-memory fallback
+        if not hasattr(self, "_in_memory_sessions"):
+            self._in_memory_sessions = {}
+        return self._in_memory_sessions.get(session_id, [])
+
+    def save_chat_history(self, session_id: str, history: List[Dict[str, str]]):
+        """Save the updated conversational history, capped to the last 10 messages."""
+        if not session_id:
+            return
+
+        capped_history = history[-10:]
+
+        client = self._get_redis_client()
+        if client:
+            try:
+                key = f"session:{session_id}"
+                client.set(key, json.dumps(capped_history), ex=settings.REDIS_SESSION_TTL)
+                return
+            except Exception as e:
+                print(f"[ChatService] Error writing to Redis: {e}")
+
+        # In-memory fallback
+        if not hasattr(self, "_in_memory_sessions"):
+            self._in_memory_sessions = {}
+        self._in_memory_sessions[session_id] = capped_history
+
     def retrieve_context(
         self, organization_id: str, question: str, top_k: int = 5
     ) -> List[Dict[str, Any]]:
@@ -89,13 +149,15 @@ class ChatService:
         return sources
 
     async def stream_response(
-        self, organization_id: str, question: str, top_k: int = 5
+        self, organization_id: str, question: str, top_k: int = 5, session_id: str = ""
     ) -> AsyncGenerator[str, None]:
         """
-        Full RAG pipeline with SSE streaming:
+        Full RAG pipeline with SSE streaming and conversation memory:
         1. Retrieve relevant context
-        2. Stream LLM response token by token as SSE events
-        3. Append source citations as final SSE event
+        2. Fetch prior chat history
+        3. Stream LLM response token by token as SSE events
+        4. Save final response to Redis/in-memory session history
+        5. Append source citations as final SSE event
         """
         # Retrieve context chunks
         chunks = self.retrieve_context(organization_id, question, top_k)
@@ -105,11 +167,17 @@ class ChatService:
         # Build messages for the LLM
         messages = [
             {"role": "system", "content": RAG_SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": f"Context Documents:\n\n{context_text}\n\n---\n\nQuestion: {question}",
-            },
         ]
+
+        # Load session history
+        history = self.get_chat_history(session_id) if session_id else []
+        for msg in history:
+            messages.append({"role": msg["role"], "content": msg["content"]})
+
+        messages.append({
+            "role": "user",
+            "content": f"Context Documents:\n\n{context_text}\n\n---\n\nQuestion: {question}",
+        })
 
         # Stream from OpenAI
         if not settings.OPENAI_API_KEY:
@@ -126,6 +194,15 @@ class ChatService:
                 mock_answer = "I don't have enough information in the knowledge base to answer that."
 
             full_text = mock_intro + mock_answer
+            
+            # Save history
+            if session_id:
+                new_history = history + [
+                    {"role": "user", "content": question},
+                    {"role": "assistant", "content": full_text}
+                ]
+                self.save_chat_history(session_id, new_history)
+
             for word in full_text.split(" "):
                 yield f"data: {json.dumps({'token': word + ' '})}\n\n"
                 await asyncio.sleep(0.04)
@@ -134,6 +211,7 @@ class ChatService:
             yield "data: [DONE]\n\n"
             return
 
+        full_answer = ""
         try:
             stream = self.openai_client.chat.completions.create(
                 model=self.model,
@@ -146,7 +224,16 @@ class ChatService:
             for chunk in stream:
                 if chunk.choices and chunk.choices[0].delta.content:
                     token = chunk.choices[0].delta.content
+                    full_answer += token
                     yield f"data: {json.dumps({'token': token})}\n\n"
+
+            # Save session history
+            if session_id and full_answer:
+                new_history = history + [
+                    {"role": "user", "content": question},
+                    {"role": "assistant", "content": full_answer}
+                ]
+                self.save_chat_history(session_id, new_history)
 
         except Exception as e:
             yield f"data: {json.dumps({'token': f'Error generating response: {str(e)}'})}\n\n"

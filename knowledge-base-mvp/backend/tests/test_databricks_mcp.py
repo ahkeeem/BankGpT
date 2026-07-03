@@ -78,6 +78,32 @@ class TestDatabricksStores(unittest.TestCase):
         self.assertTrue(mock_execute_sql.called)
 
 
+class TestChatSessionMemory(unittest.TestCase):
+    """Test ChatService conversation memory storage and retrieval."""
+
+    def test_in_memory_fallback_flow(self):
+        from app.services.chat_service import ChatService
+        from unittest.mock import MagicMock
+
+        vector_store = MagicMock()
+        embed_service = MagicMock()
+        chat_service = ChatService(vector_store, embed_service)
+
+        # Test default empty history
+        hist = chat_service.get_chat_history("session-123")
+        self.assertEqual(hist, [])
+
+        # Test saving and reading back
+        history_to_save = [
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": "Hi there!"}
+        ]
+        chat_service.save_chat_history("session-123", history_to_save)
+
+        retrieved = chat_service.get_chat_history("session-123")
+        self.assertEqual(retrieved, history_to_save)
+
+
 from app import mcp_server
 
 

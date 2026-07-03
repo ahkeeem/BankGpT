@@ -15,6 +15,7 @@ class ChatRequest(BaseModel):
     question: str
     stream: bool = True
     top_k: int = 5
+    session_id: str = ""
 
 
 @router.post("")
@@ -40,6 +41,7 @@ async def chat(request: ChatRequest):
             organization_id=request.organization_id,
             question=request.question,
             top_k=request.top_k,
+            session_id=request.session_id,
         ),
         media_type="text/event-stream",
         headers={

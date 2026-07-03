@@ -14,6 +14,9 @@ export default function ChatInterface() {
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [hoveredSource, setHoveredSource] = useState(null);
+  const [sessionId] = useState(() => {
+    return window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
+  });
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const abortControllerRef = useRef(null);
@@ -41,7 +44,7 @@ export default function ChatInterface() {
     setInput('');
     setIsStreaming(true);
 
-    const controller = streamChat(orgId, question, {
+    const controller = streamChat(orgId, question, sessionId, {
       onToken: (token) => {
         setMessages((prev) => {
           const updated = [...prev];
